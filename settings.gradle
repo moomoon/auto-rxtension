@@ -1,0 +1,4 @@
+rootProject.name = 'auto.rxtension'
+include 'processor'
+include 'example'
+
