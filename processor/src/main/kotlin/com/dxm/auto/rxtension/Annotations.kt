@@ -1,17 +1,26 @@
 package com.dxm.auto.rxtension
 
+import com.dxm.auto.rxtension.StaticPolicy.Auto
 import kotlin.annotation.AnnotationRetention.BINARY
-import kotlin.annotation.AnnotationTarget.CLASS
-import kotlin.annotation.AnnotationTarget.FUNCTION
+import kotlin.annotation.AnnotationTarget.*
 import kotlin.reflect.KClass
 
 /**
  * Created by Phoebe on 9/10/16.
  */
+
+enum class StaticPolicy {
+  Auto, Static
+}
+
 @Retention(BINARY)
 @Target(FUNCTION)
-annotation class RXtension
+annotation class RXtension(val name: String = "", val static: StaticPolicy = Auto)
 
 @Retention(BINARY)
 @Target(CLASS)
 annotation class RXtensionClass(val value: KClass<out Any> = Any::class, val name: String = "")
+
+@Retention(BINARY)
+@Target(VALUE_PARAMETER)
+annotation class Receiver

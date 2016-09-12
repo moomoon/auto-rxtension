@@ -2,7 +2,7 @@ package com.dxm.auto.rxtension
 
 import com.dxm.auto.rxtension.internal.Context
 import com.dxm.auto.rxtension.internal.JavaFileHolder
-import com.dxm.auto.rxtension.internal.Type
+import com.dxm.auto.rxtension.internal.UniqueType
 import com.dxm.auto.rxtension.processor.RXtensionProcessor
 
 /**
@@ -10,7 +10,7 @@ import com.dxm.auto.rxtension.processor.RXtensionProcessor
  */
 
 interface Processor {
-  fun process(builders: Map<Type, JavaFileHolder>, context: Context)
+  fun process(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context)
   companion object AllProcessors {
     val allProcessors: Array<Processor> = arrayOf(RXtensionProcessor())
   }
