@@ -23,7 +23,7 @@ class RXtensionAnnotationProcessor : AbstractProcessor() {
     val context = Context(roundEnv = roundEnv, processingEnv = processingEnv)
     val builders: Map<Type, JavaFileHolder> = hashMapOf()
     try {
-      Processor.allProcessors.forEach {  }
+      Processor.allProcessors.forEach { it.process(builders, context) }
       builders.values.forEach { it.build().writeTo(processingEnv.filer) }
     } catch(e: Exception) {
       processingEnv.messager.printMessage(ERROR, e.message)
