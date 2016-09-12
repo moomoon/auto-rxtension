@@ -80,10 +80,10 @@ class RXtensionActionBuilder(target: RXtensionTarget) : RXtensionBuilder(target)
   }
 }
 
-private sealed class ReceiverObject {
-  class Type(val type: TypeElement): ReceiverObject()
-  class TypeInstance(val type: TypeElement): ReceiverObject()
-  class ParameterInstance(val type: VariableElement): ReceiverObject()
+private sealed class ReceiverType {
+  class Type(val type: TypeElement): ReceiverType()
+  class Instance(val type: TypeElement): ReceiverType()
+  class Parameter(val parameter: VariableElement): ReceiverType()
 }
 
 private class Fields()
