@@ -41,7 +41,7 @@ sealed class RXtensionContainer {
   fun uniqueType(types: Types) = UniqueType(typeElement.asType(), types)
   val containerClassName: String
     get() = when (this) {
-      is AnnotatedType -> annotation.name
+      is AnnotatedType -> annotation.value
       is Type -> type.simpleName.toString() + "_Extensions"
     }
 
@@ -61,9 +61,9 @@ private val ExecutableElement.target: RXtensionTarget?
   get() = container?.let { RXtensionTarget(this, this.getAnnotation(RXtension::class.java), it) }
 
 private val RXtensionTarget.bindingClassName: String
-  get() = annotation.name.isNotBlankOr { element.simpleName.toString() + "Binding" }
+  get() = annotation.value.isNotBlankOr { element.simpleName.toString() + "Binding" }
 private val RXtensionTarget.bindingMethodName: String
-  get() = annotation.name.isNotBlankOr { element.simpleName.toString() }
+  get() = annotation.value.isNotBlankOr { element.simpleName.toString() }
 
 enum class RXtensionType {
   Func, Action
@@ -91,6 +91,19 @@ abstract class RXtensionBuilder(val target: RXtensionTarget) {
 
   abstract fun methodSpec(methodName: String, type: TypeSpec, context: Context): MethodSpec
   abstract fun typeSpec(typeName: String, context: Context): TypeSpec
+}
+
+interface RXtensionClassBuilder {
+  fun build(target: RXtensionTarget, typeName: String, context: Context): TypeSpec
+}
+
+interface RXtensionMethodBuilder {
+  fun build(target: RXtensionTarget, type: TypeSpec,  methodName: String, context: Context): MethodSpec
+  companion object: RXtensionMethodBuilder {
+    override fun build(target: RXtensionTarget, type: TypeSpec, methodName: String, context: Context): MethodSpec {
+      throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+  }
 }
 
 class RXtensionFuncBuilder(target: RXtensionTarget) : RXtensionBuilder(target) {
