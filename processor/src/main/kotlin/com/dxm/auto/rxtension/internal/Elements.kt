@@ -34,4 +34,4 @@ val Element.packageElement: PackageElement
   }
 
 val ExecutableElement.returnsKind: (TypeKind) -> Boolean
-    get() = { returnType.kind.equals(it)}
+    get() = { returnType.kind.equals(it) }

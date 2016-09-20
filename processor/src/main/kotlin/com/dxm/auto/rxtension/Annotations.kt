@@ -15,7 +15,7 @@ enum class StaticPolicy {
 
 @Retention(BINARY)
 @Target(FUNCTION)
-annotation class RXtension(val name: String = "", val static: StaticPolicy = Auto)
+annotation class RXtension(val name: String = "", val scope: StaticPolicy = Auto)
 
 @Retention(BINARY)
 @Target(CLASS)

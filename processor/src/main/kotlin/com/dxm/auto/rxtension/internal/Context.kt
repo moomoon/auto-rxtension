@@ -9,5 +9,5 @@ import javax.lang.model.type.TypeMirror
  */
 
 class Context(val roundEnv: RoundEnvironment, val processingEnv: ProcessingEnvironment) {
-  val uniqueType: (typeMirror: TypeMirror) -> UniqueType = { UniqueType(it, processingEnv.typeUtils) }
+//  val uniqueType: (typeMirror: TypeMirror) -> UniqueType = { UniqueType(it, processingEnv.typeUtils) }
 }
