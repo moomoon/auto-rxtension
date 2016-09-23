@@ -1,14 +1,15 @@
 package com.dxm.auto.rxtension.processor
 
-import com.dxm.auto.rxtension.Processor
-import com.dxm.auto.rxtension.RXtension
-import com.dxm.auto.rxtension.RXtensionClass
+import com.dxm.auto.rxtension.*
 import com.dxm.auto.rxtension.internal.*
 import com.dxm.auto.rxtension.processor.RXtensionType.Action
 import com.dxm.auto.rxtension.processor.RXtensionType.Func
+import com.google.common.base.CaseFormat.LOWER_CAMEL
+import com.google.common.base.CaseFormat.UPPER_CAMEL
 import com.squareup.javapoet.MethodSpec
 import com.squareup.javapoet.TypeSpec
 import com.squareup.javapoet.TypeSpec.classBuilder
+import javax.lang.model.element.Element
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.TypeElement
 import javax.lang.model.element.VariableElement
@@ -28,28 +29,23 @@ class RXtensionProcessor : Processor {
           }
 }
 
-sealed class RXtensionContainer {
-  class AnnotatedType(val annotation: RXtensionClass, val type: TypeElement) : RXtensionContainer()
-  class Type(val type: TypeElement) : RXtensionContainer()
-
-  val typeElement: TypeElement
-    get() = when (this) {
-      is AnnotatedType -> type
-      is Type -> type
-    }
+sealed class RXtensionContainer(val typeElement: TypeElement) {
+  abstract val containerClassName: String
   val packageName = typeElement.packageElement.simpleName.toString()
   fun uniqueType(types: Types) = UniqueType(typeElement.asType(), types)
-  val containerClassName: String
-    get() = when (this) {
-      is AnnotatedType -> annotation.value
-      is Type -> type.simpleName.toString() + "_Extensions"
-    }
+  fun emptyJavaFileHolder() = JavaFileHolder(packageName, classBuilder(containerClassName))
+
+  class AnnotatedType(val annotation: RXtensionClass, type: TypeElement) : RXtensionContainer(type) {
+    override val containerClassName: String = annotation.value
+  }
+
+  class Type(type: TypeElement) : RXtensionContainer(type) {
+    override val containerClassName: String = type.simpleName.toString() + "_Extensions"
+  }
 
   companion object {
     val create: (typeElement: TypeElement) -> RXtensionContainer = { typeElement -> typeElement.getAnnotation(RXtensionClass::class.java)?.let { AnnotatedType(it, typeElement) } ?: Type(typeElement) }
   }
-
-  val emptyJavaFileHolder: () -> JavaFileHolder = { JavaFileHolder(packageName, classBuilder(containerClassName)) }
 }
 
 private val ExecutableElement.container: RXtensionContainer?
@@ -61,7 +57,7 @@ private val ExecutableElement.target: RXtensionTarget?
   get() = container?.let { RXtensionTarget(this, this.getAnnotation(RXtension::class.java), it) }
 
 private val RXtensionTarget.bindingClassName: String
-  get() = annotation.value.isNotBlankOr { element.simpleName.toString() + "Binding" }
+  get() = annotation.value.isNotBlankOr { element.simpleName.toString() }.let(LOWER_CAMEL to UPPER_CAMEL) + "Binding"
 private val RXtensionTarget.bindingMethodName: String
   get() = annotation.value.isNotBlankOr { element.simpleName.toString() }
 
@@ -79,14 +75,48 @@ private val RXtensionTarget.type: RXtensionType
   get() = if (element.returnsKind(VOID)) Action else Func
 
 private fun RXtensionTarget.build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) = type.builder(this).build(builders, context)
+private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
+  val methodReceiver = if (element.static) {
+    (element.getAnnotation(Receiver::class.java) ?:
+        element.getAnnotation(Partial::class.java) ?:
+        element.getAnnotation(Dynamic::class.java))?.let {
+      throw IllegalArgumentException("Static function $element cannot be annotated with $it")
+    }
+  } else {
+    val receiver = element.getAnnotation(Receiver::class.java)
+    val partial = element.getAnnotation(Partial::class.java)
+    val dynamic = element.getAnnotation(Dynamic::class.java)
+    listOf(receiver, partial, dynamic).filterNotNull().let {
+      when (it.count()) {
+        0, 1 -> receiver?.let {
+          ReceiverType.Type(element.enclosingElement as TypeElement, it, context.processingEnv.typeUtils)
+        }
+        else -> throw IllegalArgumentException("$element cannot be annotated with both $it at the same time.")
+      }
+    }
+  }
+  val parameterReceivers = element.parameters.mapNotNull { parameter ->
+    parameter.getAnnotation(Receiver::class.java)?.let {
+      ReceiverType.Parameter(parameter, it, context.processingEnv.typeUtils)
+    }
+  }
+  return listOf(methodReceiver).append(parameterReceivers).filterNotNull()
+}
+
+private fun RXtensionTarget.constructorParamters(context: Context): List<ConstructorParameter> {
+  return listOf()
+}
+
+//private fun RXtensionTarget.
 
 abstract class RXtensionBuilder(val target: RXtensionTarget) {
   fun build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) {
     val uniqueType = target.container.uniqueType(context.processingEnv.typeUtils)
-    val holder = builders.getOrPut(uniqueType, target.container.emptyJavaFileHolder)
+    val holder = builders.getOrPut(uniqueType) { target.container.emptyJavaFileHolder() }
+    target.receivers(context).forEach { holder.add(it) }
     val type = typeSpec(target.bindingClassName.uniqueIn(holder.typeNames), context)
     val method = methodSpec(target.bindingMethodName.uniqueIn(holder.typeNames), type, context)
-    holder.add(method, type)
+    holder += method to type
   }
 
   abstract fun methodSpec(methodName: String, type: TypeSpec, context: Context): MethodSpec
@@ -98,8 +128,9 @@ interface RXtensionClassBuilder {
 }
 
 interface RXtensionMethodBuilder {
-  fun build(target: RXtensionTarget, type: TypeSpec,  methodName: String, context: Context): MethodSpec
-  companion object: RXtensionMethodBuilder {
+  fun build(target: RXtensionTarget, type: TypeSpec, methodName: String, context: Context): MethodSpec
+
+  companion object : RXtensionMethodBuilder {
     override fun build(target: RXtensionTarget, type: TypeSpec, methodName: String, context: Context): MethodSpec {
       throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
@@ -126,11 +157,38 @@ class RXtensionActionBuilder(target: RXtensionTarget) : RXtensionBuilder(target)
   }
 }
 
-private sealed class ReceiverType {
-  class Type(val type: TypeElement) : ReceiverType()
-  class Instance(val type: TypeElement) : ReceiverType()
-  class Parameter(val parameter: VariableElement) : ReceiverType()
+
+sealed class ReceiverType(val type: UniqueType) {
+  abstract val name: String
+  abstract val overrideName: String?
+
+  class Type(type: TypeElement, val annotation: Receiver?, types: Types) : ReceiverType(UniqueType(type.asType(), types)) {
+    override val name = annotation?.value?.unless(CharSequence::isBlank) ?: type.receiverName
+    override val overrideName = annotation?.value?.unless(String::isBlank)
+  }
+
+  class Parameter(parameter: VariableElement, val annotation: Receiver, types: Types) : ReceiverType(UniqueType(parameter.asType(), types)) {
+    override val name = annotation.value.unless(CharSequence::isBlank) ?: parameter.receiverName
+    override val overrideName = annotation.value.unless(String::isBlank)
+  }
+
+  fun equalsReceiver(other: ReceiverType) = other.type.equals(type) && other.name.equals(name)
+
+  val Element.receiverName: String
+    get() = simpleName.toString().let(UPPER_CAMEL to LOWER_CAMEL)
+
+
+  val debugString: String
+    get() = overrideName?.let { "Receiver($it) ${type.typeMirror}" } ?: "${type.typeMirror}"
 }
 
-private class Fields()
-
+sealed class ConstructorParameter {
+  class ConstructorReceiverType(val type: ReceiverType.Type) : ConstructorParameter() {
+    constructor(type: TypeElement, annotation: Receiver?, types: Types): this(ReceiverType.Type(type, annotation, types))
+  }
+  class ConstructorPartialType(val type: TypeElement, val annotation: Partial) : ConstructorParameter()
+  class ConstructorReceiverParameter(val parameter: ReceiverType.Parameter) : ConstructorParameter() {
+    constructor(parameter: VariableElement, annotation: Receiver, types: Types): this(ReceiverType.Parameter(parameter, annotation, types))
+  }
+  class ConstructorPartialParameter(val parameter: VariableElement, val annotation: Partial) : ConstructorParameter()
+}
