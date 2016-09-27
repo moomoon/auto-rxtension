@@ -7,7 +7,7 @@ import com.google.common.base.Converter
  * Created by ants on 9/20/16.
  */
 
-inline fun <T : CharSequence> T.isNotBlankOr(defaultVal: () -> T) = if (isNotBlank()) this else defaultVal()
+infix inline fun <T : CharSequence> T.isNotBlankOr(defaultVal: () -> T) = if (isNotBlank()) this else defaultVal()
 
 fun String.uniqueIn(set: Set<String>): String {
   tailrec fun dedup(surfix: Int): String = "$this$surfix" unless { set.contains(this) } ?: dedup(surfix + 1)

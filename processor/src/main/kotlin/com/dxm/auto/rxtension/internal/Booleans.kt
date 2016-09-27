@@ -6,3 +6,9 @@ package com.dxm.auto.rxtension.internal
 
 infix inline fun <T> T.`if`(predicate: T.() -> Boolean): T? = if (this.predicate()) this else null
 infix inline fun <T> T.unless(predicate: T.() -> Boolean): T? = if (this.predicate()) null else this
+
+val Boolean?.isTrue: Boolean
+  get() = this ?: false
+
+val Boolean?.isFalse: Boolean
+  get() = isTrue.not()
