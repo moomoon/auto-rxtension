@@ -75,7 +75,7 @@ private val RXtensionTarget.type: RXtensionType
   get() = if (element.returnsKind(VOID)) Action else Func
 
 private fun RXtensionTarget.build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) = type.builder(this).build(builders, context)
-private inline fun <T, A : Element> A.parseAnnotation(creator: (Receiver?, Partial?, Dynamic?, A) -> T) =
+private inline fun <T, A : Element> A.parseAnnotation(creator: (Receiver?, Partial?, Dynamic?) -> T) =
     if ((this as? ExecutableElement)?.static.isTrue) {
       (getAnnotation(Receiver::class.java) ?:
           getAnnotation(Partial::class.java) ?:
@@ -88,22 +88,22 @@ private inline fun <T, A : Element> A.parseAnnotation(creator: (Receiver?, Parti
       val dynamic = getAnnotation(Dynamic::class.java)
       listOf(receiver, partial, dynamic).filterNotNull().let {
         when (it.count()) {
-          0, 1 -> creator(receiver, partial, dynamic, this)
+          0, 1 -> creator(receiver, partial, dynamic)
           else -> throw IllegalArgumentException("$this cannot be annotated with both $it at the same time.")
         }
       }
     }
 
 private fun RXtensionTarget.methodReceiverAsReceiver(context: Context) =
-    element.enclosingTypeElement?.let { type -> element.parseAnnotation { receiver, _, _, method -> ReceiverType.Type(type, receiver, context.processingEnv.typeUtils) } }
+    element.enclosingTypeElement?.let { type -> element.parseAnnotation { receiver, _, _ -> ReceiverType.Type(type, receiver, context.processingEnv.typeUtils) } }
 
 private fun RXtensionTarget.methodReceiverAsPartial(context: Context) =
-    element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, partial, _, method -> partial?.let { ConstructorParameter.ConstructorPartialType(type, it, context.processingEnv.typeUtils) } } }
+    element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, partial, _ -> partial?.let { ConstructorParameter.ConstructorPartialType(type, it, context.processingEnv.typeUtils) } } }
 
 private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
-  val parameterReceivers = element.parameters.mapNotNull {
-    it.parseAnnotation { receiver, _, _, variableElement ->
-      receiver?.let { ReceiverType.Parameter(variableElement, it, context.processingEnv.typeUtils) }
+  val parameterReceivers = element.parameters.mapNotNull { parameter ->
+    parameter.parseAnnotation { receiver, _, _ ->
+      receiver?.let { ReceiverType.Parameter(parameter, it, context.processingEnv.typeUtils) }
     }
   }
   return listOf(methodReceiverAsReceiver(context)).append(parameterReceivers).filterNotNull()
@@ -112,23 +112,33 @@ private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
 private fun RXtensionTarget.constructorParamters(context: Context): List<ConstructorParameter> {
   val methodReceiver = methodReceiverAsReceiver(context)?.let(ConstructorParameter::ConstructorReceiverType) ?: methodReceiverAsPartial(context)
   val parameters = element.parameters.mapNotNull { parameter ->
-    parameter.parseAnnotation { receiver, partial, _, variableElement ->
-      receiver?.let { ConstructorParameter.ConstructorReceiverParameter(variableElement, it, context.processingEnv.typeUtils) } ?:
-          partial?.let { ConstructorParameter.ConstructorPartialParameter(variableElement, it, context.processingEnv.typeUtils) }
+    parameter.parseAnnotation { receiver, partial, _ ->
+      receiver?.let { ConstructorParameter.ConstructorReceiverParameter(parameter, it, context.processingEnv.typeUtils) } ?:
+          partial?.let { ConstructorParameter.ConstructorPartialParameter(parameter, it, context.processingEnv.typeUtils) }
     }
   }
   return listOf(methodReceiver).append(parameters).filterNotNull()
 }
 
 private fun RXtensionTarget.dynamicParameters(context: Context): List<DynamicParameter> {
-  val methodReceiver = element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, _, dynamic, _ -> dynamic?.let { DynamicParameter.Type(type, it, context.processingEnv.typeUtils) } } }
+  val methodReceiver = element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, _, dynamic -> dynamic?.let { DynamicParameter.Type(type, it, context.processingEnv.typeUtils) } } }
   val parameters = element.parameters.mapNotNull { parameter ->
-    parameter.parseAnnotation { _, _, dynamic, variableElement -> DynamicParameter.Parameter(variableElement, dynamic, context.processingEnv.typeUtils) }
+    parameter.parseAnnotation { _, _, dynamic -> DynamicParameter.Parameter(parameter, dynamic, context.processingEnv.typeUtils) }
   }
   return listOf(methodReceiver).append(parameters).filterNotNull()
 }
 
-private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverType>, List<ConstructorParameter>, List<DynamicParameter>> {
+private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverType>, List<ConstructorParameter>, List<DynamicParameter>>? {
+  val types = context.processingEnv.typeUtils
+  val triple = element.enclosingTypeElement?.let { type ->
+    element.parseAnnotation { receiver, partial, dynamic ->
+      Triple(ReceiverType.Type(type, receiver, types),
+          partial?.let { ConstructorParameter.ConstructorPartialType(type, it, types) } ?: ReceiverType.Type(type, receiver, types).let(ConstructorParameter::ConstructorReceiverType),
+          dynamic?.let { DynamicParameter.Type(type, it, types) }
+      )
+    }
+  } ?: return null
+  val (receiverAsReceiver, receiverAsConstructor, receiverAsDynamic) = triple
   return Triple(receivers(context), constructorParamters(context), dynamicParameters(context))
 }
 
@@ -136,7 +146,6 @@ private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverTy
 
 abstract class RXtensionBuilder(val target: RXtensionTarget) {
   fun build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) {
-    val (r, c, d) = target.parameters(context)
     val uniqueType = target.container.uniqueType(context.processingEnv.typeUtils)
     val holder = builders.getOrPut(uniqueType) { target.container.emptyJavaFileHolder() }
     target.receivers(context).forEach { holder.add(it) }
