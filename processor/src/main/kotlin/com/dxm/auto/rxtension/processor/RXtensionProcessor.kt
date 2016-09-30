@@ -75,6 +75,7 @@ private val RXtensionTarget.type: RXtensionType
   get() = if (element.returnsKind(VOID)) Action else Func
 
 private fun RXtensionTarget.build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) = type.builder(this).build(builders, context)
+
 private inline fun <T, A : Element> A.parseAnnotation(creator: (Receiver?, Partial?, Dynamic?) -> T) =
     if ((this as? ExecutableElement)?.static.isTrue) {
       (getAnnotation(Receiver::class.java) ?:
@@ -109,7 +110,7 @@ private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
   return listOf(methodReceiverAsReceiver(context)).append(parameterReceivers).filterNotNull()
 }
 
-private fun RXtensionTarget.constructorParamters(context: Context): List<ConstructorParameter> {
+private fun RXtensionTarget.constructorParameters(context: Context): List<ConstructorParameter> {
   val methodReceiver = methodReceiverAsReceiver(context)?.let(ConstructorParameter::ConstructorReceiverType) ?: methodReceiverAsPartial(context)
   val parameters = element.parameters.mapNotNull { parameter ->
     parameter.parseAnnotation { receiver, partial, _ ->
@@ -128,30 +129,36 @@ private fun RXtensionTarget.dynamicParameters(context: Context): List<DynamicPar
   return listOf(methodReceiver).append(parameters).filterNotNull()
 }
 
-private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverType>, List<ConstructorParameter>, List<DynamicParameter>>? {
+private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverType>, List<ConstructorParameter>, List<DynamicParameter>> {
   val types = context.processingEnv.typeUtils
-  val triple = element.enclosingTypeElement?.let { type ->
-    element.parseAnnotation { receiver, partial, dynamic ->
-      Triple(ReceiverType.Type(type, receiver, types),
-          partial?.let { ConstructorParameter.ConstructorPartialType(type, it, types) } ?: ReceiverType.Type(type, receiver, types).let(ConstructorParameter::ConstructorReceiverType),
-          dynamic?.let { DynamicParameter.Type(type, it, types) }
-      )
-    }
-  } ?: return null
-  val (receiverAsReceiver, receiverAsConstructor, receiverAsDynamic) = triple
-  return Triple(receivers(context), constructorParamters(context), dynamicParameters(context))
+  val enclosingType = element.enclosingTypeElement ?: throw RuntimeException("Cannot find enclosing type of $element.")
+  val receiverTriple = element.parseAnnotation { receiver, partial, dynamic ->
+    Triple(ReceiverType.Type(enclosingType, receiver, types),
+        partial?.let { ConstructorParameter.ConstructorPartialType(enclosingType, it, types) } ?:
+            ReceiverType.Type(enclosingType, receiver, types).let(ConstructorParameter::ConstructorReceiverType),
+        dynamic?.let { DynamicParameter.Type(enclosingType, it, types) })
+  }
+  val parameterTriple = element.parameters.map { parameter ->
+    parameter.parseAnnotation { receiver, partial, dynamic ->
+      Triple(receiver?.let { ReceiverType.Parameter(parameter, it, types) },
+          receiver?.let { ConstructorParameter.ConstructorReceiverParameter(parameter, it, types) } ?:
+              partial?.let { ConstructorParameter.ConstructorPartialParameter(parameter, it, types) },
+          DynamicParameter.Parameter(parameter, dynamic, types))
+    } ?: throw RuntimeException("Expecting VariableElement, got $parameter.")
+  }
+  val (receiverAsReceiver, receiverAsConstructor, receiverAsDynamic) = receiverTriple.nullableElements()
+  val (parameterReceiver, parameterConstructor, parameterDynamic) = parameterTriple.rotate()
+  return Triple(listOf(receiverAsReceiver).append(parameterReceiver).filterNotNull(),
+      listOf(receiverAsConstructor).append(parameterConstructor).filterNotNull(),
+      listOf(receiverAsDynamic).append(parameterDynamic).filterNotNull())
 }
-
-//private fun RXtensionTarget.
 
 abstract class RXtensionBuilder(val target: RXtensionTarget) {
   fun build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) {
     val uniqueType = target.container.uniqueType(context.processingEnv.typeUtils)
-    val holder = builders.getOrPut(uniqueType) { target.container.emptyJavaFileHolder() }
-    target.receivers(context).forEach { holder.add(it) }
-    val type = typeSpec(target.bindingClassName.uniqueIn(holder.typeNames), context)
-    val method = methodSpec(target.bindingMethodName.uniqueIn(holder.typeNames), type, context)
-    holder += method to type
+    val (receivers, constructorParameters, dynamicParameters) = target.parameters(context)
+    builders.getOrPut(uniqueType) { target.container.emptyJavaFileHolder() }
+        .add(receivers, constructorParameters, dynamicParameters, target.element.returnType)
   }
 
   abstract fun methodSpec(methodName: String, type: TypeSpec, context: Context): MethodSpec
@@ -205,9 +212,7 @@ sealed class ReceiverType(val type: UniqueType) {
     override val name = annotation.value isNotBlankOr { parameter.receiverName }
     override val overrideName = annotation.value unless String::isBlank
   }
-
-  fun equalsReceiver(other: ReceiverType) = other.type.equals(type) && other.name.equals(name)
-
+  override fun equals(other: Any?) = (other as? ReceiverType)?.let { it.type.equals(type) && it.name.equals(name) }.isTrue
   val Element.receiverName: String
     get() = simpleName.toString().let(UPPER_CAMEL to LOWER_CAMEL)
 
