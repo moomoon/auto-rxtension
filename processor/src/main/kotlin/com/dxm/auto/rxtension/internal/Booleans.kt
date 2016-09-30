@@ -12,3 +12,6 @@ val Boolean?.isTrue: Boolean
 
 val Boolean?.isFalse: Boolean
   get() = isTrue.not()
+
+infix inline fun <A> Boolean.whenTrue(value: () -> A) = if (this) value() else null
+infix inline fun <A> Boolean.whenFalse(value: () -> A) = if (!this) value() else null

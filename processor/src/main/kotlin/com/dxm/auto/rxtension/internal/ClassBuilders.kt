@@ -51,6 +51,23 @@ class JavaFileHolder(val packageName: String, private val builder: TypeSpec.Buil
   fun build() = JavaFile.builder(packageName, builder.apply { methodsAndTypes.forEach(builder.addEntry) }.build()!!).build()!!
 }
 
+private sealed class NamedFinalParameter(val name: String) {
+  class Receiver(val receiver: ReceiverType, name: String) : NamedFinalParameter(name)
+  class Constructor(val constructorParameter: ConstructorParameter, name: String) : NamedFinalParameter(name)
+}
+
+private fun NamedFinalParameter.equalsParameter(receiver: ReceiverType) =
+    when (this) {
+      is NamedFinalParameter.Receiver -> this.receiver.equalsReceiver(receiver)
+      else -> false
+    }
+private fun NamedFinalParameter.equalsParameter(constructorParameter: ConstructorParameter) =
+    when (this) {
+      is NamedFinalParameter.Constructor -> this.constructorParameter.equals(constructorParameter)
+      else -> false
+    }
+
+
 private val TypeSpec.Builder.addEntry: (Map.Entry<MethodSpec, TypeSpec>) -> Unit
   get() = { addMethod(it.key); addType(it.value) }
 

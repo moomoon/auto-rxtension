@@ -14,8 +14,10 @@ import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.TypeElement
 import javax.lang.model.element.VariableElement
 import javax.lang.model.type.TypeKind.VOID
+import javax.lang.model.type.TypeMirror
 import javax.lang.model.util.Types
 import javax.tools.Diagnostic
+import kotlin.LazyThreadSafetyMode.NONE
 
 /**
  * Created by Phoebe on 9/11/16.
@@ -95,55 +97,54 @@ private inline fun <T, A : Element> A.parseAnnotation(creator: (Receiver?, Parti
       }
     }
 
-private fun RXtensionTarget.methodReceiverAsReceiver(context: Context) =
-    element.enclosingTypeElement?.let { type -> element.parseAnnotation { receiver, _, _ -> ReceiverType.Type(type, receiver, context.processingEnv.typeUtils) } }
+//private fun RXtensionTarget.methodReceiverAsReceiver(context: Context) =
+//    element.enclosingTypeElement?.let { type -> element.parseAnnotation { receiver, _, _ -> ReceiverType.Type(type, receiver, context.processingEnv.typeUtils) } }
+//
+//private fun RXtensionTarget.methodReceiverAsPartial(context: Context) =
+//    element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, partial, _ -> partial?.let { ConstructorParameter.ConstructorPartialType(type, it, context.processingEnv.typeUtils) } } }
 
-private fun RXtensionTarget.methodReceiverAsPartial(context: Context) =
-    element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, partial, _ -> partial?.let { ConstructorParameter.ConstructorPartialType(type, it, context.processingEnv.typeUtils) } } }
+//private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
+//  val parameterReceivers = element.parameters.mapNotNull { parameter ->
+//    parameter.parseAnnotation { receiver, _, _ ->
+//      receiver?.let { ReceiverType.Parameter(parameter, it, context.processingEnv.typeUtils) }
+//    }
+//  }
+//  return listOf(methodReceiverAsReceiver(context)).append(parameterReceivers).filterNotNull()
+//}
+//
+//private fun RXtensionTarget.constructorParameters(context: Context): List<ConstructorParameter> {
+//  val methodReceiver = methodReceiverAsReceiver(context)?.let(ConstructorParameter::ConstructorReceiverType) ?: methodReceiverAsPartial(context)
+//  val parameters = element.parameters.mapNotNull { parameter ->
+//    parameter.parseAnnotation { receiver, partial, _ ->
+//      receiver?.let { ConstructorParameter.ConstructorReceiverParameter(parameter, it, context.processingEnv.typeUtils) } ?:
+//          partial?.let { ConstructorParameter.ConstructorPartialParameter(parameter, it, context.processingEnv.typeUtils) }
+//    }
+//  }
+//  return listOf(methodReceiver).append(parameters).filterNotNull()
+//}
 
-private fun RXtensionTarget.receivers(context: Context): List<ReceiverType> {
-  val parameterReceivers = element.parameters.mapNotNull { parameter ->
-    parameter.parseAnnotation { receiver, _, _ ->
-      receiver?.let { ReceiverType.Parameter(parameter, it, context.processingEnv.typeUtils) }
-    }
-  }
-  return listOf(methodReceiverAsReceiver(context)).append(parameterReceivers).filterNotNull()
-}
-
-private fun RXtensionTarget.constructorParameters(context: Context): List<ConstructorParameter> {
-  val methodReceiver = methodReceiverAsReceiver(context)?.let(ConstructorParameter::ConstructorReceiverType) ?: methodReceiverAsPartial(context)
-  val parameters = element.parameters.mapNotNull { parameter ->
-    parameter.parseAnnotation { receiver, partial, _ ->
-      receiver?.let { ConstructorParameter.ConstructorReceiverParameter(parameter, it, context.processingEnv.typeUtils) } ?:
-          partial?.let { ConstructorParameter.ConstructorPartialParameter(parameter, it, context.processingEnv.typeUtils) }
-    }
-  }
-  return listOf(methodReceiver).append(parameters).filterNotNull()
-}
-
-private fun RXtensionTarget.dynamicParameters(context: Context): List<DynamicParameter> {
-  val methodReceiver = element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, _, dynamic -> dynamic?.let { DynamicParameter.Type(type, it, context.processingEnv.typeUtils) } } }
-  val parameters = element.parameters.mapNotNull { parameter ->
-    parameter.parseAnnotation { _, _, dynamic -> DynamicParameter.Parameter(parameter, dynamic, context.processingEnv.typeUtils) }
-  }
-  return listOf(methodReceiver).append(parameters).filterNotNull()
-}
+//private fun RXtensionTarget.dynamicParameters(context: Context): List<DynamicParameter> {
+//  val methodReceiver = element.enclosingTypeElement?.let { type -> element.parseAnnotation { _, _, dynamic -> dynamic?.let { DynamicParameter.Type(type, it, context.processingEnv.typeUtils) } } }
+//  val parameters = element.parameters.mapNotNull { parameter ->
+//    parameter.parseAnnotation { _, _, dynamic -> DynamicParameter.Parameter(parameter, dynamic, context.processingEnv.typeUtils) }
+//  }
+//  return listOf(methodReceiver).append(parameters).filterNotNull()
+//}
 
 private fun RXtensionTarget.parameters(context: Context): Triple<List<ReceiverType>, List<ConstructorParameter>, List<DynamicParameter>> {
   val types = context.processingEnv.typeUtils
   val enclosingType = element.enclosingTypeElement ?: throw RuntimeException("Cannot find enclosing type of $element.")
   val receiverTriple = element.parseAnnotation { receiver, partial, dynamic ->
-    Triple(ReceiverType.Type(enclosingType, receiver, types),
-        partial?.let { ConstructorParameter.ConstructorPartialType(enclosingType, it, types) } ?:
-            ReceiverType.Type(enclosingType, receiver, types).let(ConstructorParameter::ConstructorReceiverType),
+    Triple(
+        (partial.isNull && dynamic.isNull) whenTrue { ReceiverType.Type(enclosingType, receiver, types) },
+        partial?.let { ConstructorParameter.Type(enclosingType, it, types) },
         dynamic?.let { DynamicParameter.Type(enclosingType, it, types) })
   }
   val parameterTriple = element.parameters.map { parameter ->
     parameter.parseAnnotation { receiver, partial, dynamic ->
       Triple(receiver?.let { ReceiverType.Parameter(parameter, it, types) },
-          receiver?.let { ConstructorParameter.ConstructorReceiverParameter(parameter, it, types) } ?:
-              partial?.let { ConstructorParameter.ConstructorPartialParameter(parameter, it, types) },
-          DynamicParameter.Parameter(parameter, dynamic, types))
+          partial?.let { ConstructorParameter.Parameter(parameter, it, types) },
+          (receiver.isNull && partial.isNull) whenTrue { DynamicParameter.Parameter(parameter, dynamic, types) })
     } ?: throw RuntimeException("Expecting VariableElement, got $parameter.")
   }
   val (receiverAsReceiver, receiverAsConstructor, receiverAsDynamic) = receiverTriple.nullableElements()
@@ -199,40 +200,57 @@ class RXtensionActionBuilder(target: RXtensionTarget) : RXtensionBuilder(target)
   }
 }
 
-sealed class ReceiverType(val type: UniqueType) {
-  abstract val name: String
-  abstract val overrideName: String?
+sealed class ReceiverType(val type: UniqueType, private val element: Element) {
+  protected abstract val overrideName: String?
+  val name: String by lazy(NONE) { overrideName ?: element.receiverName }
 
-  class Type(type: TypeElement, val annotation: Receiver?, types: Types) : ReceiverType(UniqueType(type.asType(), types)) {
-    override val name = annotation?.value?.unless(CharSequence::isBlank) ?: type.receiverName
+  constructor(element: Element, types: Types) : this(UniqueType(element.asType(), types), element)
+
+  class Type(type: TypeElement, val annotation: Receiver?, types: Types) : ReceiverType(type, types) {
     override val overrideName = annotation?.value?.unless(String::isBlank)
   }
 
-  class Parameter(parameter: VariableElement, val annotation: Receiver, types: Types) : ReceiverType(UniqueType(parameter.asType(), types)) {
-    override val name = annotation.value isNotBlankOr { parameter.receiverName }
+  class Parameter(parameter: VariableElement, val annotation: Receiver, types: Types) : ReceiverType(parameter, types) {
     override val overrideName = annotation.value unless String::isBlank
   }
-  override fun equals(other: Any?) = (other as? ReceiverType)?.let { it.type.equals(type) && it.name.equals(name) }.isTrue
+
+  fun equalsReceiver(other: ReceiverType) = other.type.equals(type) && other.name.equals(name)
   val Element.receiverName: String
     get() = simpleName.toString().let(UPPER_CAMEL to LOWER_CAMEL)
-
-
   val debugString: String
     get() = overrideName?.let { "Receiver($it) ${type.typeMirror}" } ?: "${type.typeMirror}"
 }
 
-sealed class ConstructorParameter {
-  class ConstructorReceiverType(val type: ReceiverType.Type) : ConstructorParameter()
-  class ConstructorPartialType(val type: TypeElement, val annotation: Partial, val types: Types) : ConstructorParameter()
-  class ConstructorReceiverParameter(val parameter: ReceiverType.Parameter) : ConstructorParameter() {
-    constructor(parameter: VariableElement, annotation: Receiver, types: Types) : this(ReceiverType.Parameter(parameter, annotation, types))
-  }
+sealed class ConstructorParameter(val uniqueType: UniqueType, val annotation: Partial, private val element: Element) {
+  constructor(element: Element, types: Types, annotation: Partial) : this(UniqueType(element.asType(), types), annotation, element)
 
-  class ConstructorPartialParameter(val parameter: VariableElement, val annotation: Partial, val types: Types) : ConstructorParameter()
+  val name = annotation.value.isNotBlankOr { element.constructorParameterName }
+
+  class Type(val type: TypeElement, annotation: Partial, types: Types) : ConstructorParameter(type, types, annotation)
+  class Parameter(val parameter: VariableElement, annotation: Partial, types: Types) : ConstructorParameter(parameter, types, annotation)
+
+  fun equalsConstructorParameter(other: ConstructorParameter) = other.uniqueType.equals(uniqueType) && other.name.equals(name)
+  val Element.constructorParameterName: String
+    get() = simpleName.toString().let(UPPER_CAMEL to LOWER_CAMEL)
 }
 
-sealed class DynamicParameter(val types: Types) {
-  class Type(val type: TypeElement, val annotation: Dynamic, types: Types) : DynamicParameter(types)
-  class Parameter(val parameter: VariableElement, val annotation: Dynamic?, types: Types) : DynamicParameter(types)
+sealed class DynamicParameter(val uniqueType: UniqueType, private val element: Element) {
+  protected abstract val overrideName: String?
+  val name: String by lazy(NONE) { overrideName ?: element.dynamicParameterName }
+
+  constructor(element: Element, types: Types) : this(UniqueType(element.asType(), types), element)
+
+  class Type(val type: TypeElement, val annotation: Dynamic, types: Types) : DynamicParameter(type, types) {
+    override val overrideName = annotation.value unless String::isEmpty
+  }
+
+  class Parameter(val parameter: VariableElement, val annotation: Dynamic?, types: Types) : DynamicParameter(parameter, types) {
+    override val overrideName = annotation?.value?.unless(String::isEmpty)
+  }
+
+  fun equalsDynamicParameter(other: DynamicParameter) = other.uniqueType.equals(uniqueType) && other.name.equals(name)
+  val Element.dynamicParameterName: String
+    get() = simpleName.toString().let(UPPER_CAMEL to LOWER_CAMEL)
+
 }
 
