@@ -14,6 +14,6 @@ fun String.uniqueIn(set: Set<String>): String {
   return unless { set.contains(this) } ?: dedup(0)
 }
 
-infix fun CaseFormat.to(format: CaseFormat): (String) -> String = converterTo(format).lambda
-private val Converter<String, String>.lambda: (String) -> String
-    get() = { this.convert(it)!! }
+fun MutableSet<String>.unique(name: String): String = name.uniqueIn(this).apply { add(this) }
+
+infix fun CaseFormat.to(format: CaseFormat): (String) -> String = { this.to(format, it) }
