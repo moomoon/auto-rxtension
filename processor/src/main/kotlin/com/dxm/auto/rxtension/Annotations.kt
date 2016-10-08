@@ -9,7 +9,7 @@ import kotlin.annotation.AnnotationTarget.*
 
 @Retention(BINARY)
 @Target(FUNCTION)
-annotation class RXtension(val value: String = "")
+annotation class RXtension(val value: String = "", val exception: Class<in RuntimeException> = RuntimeException::class.java)
 
 @Retention(BINARY)
 @Target(CLASS)

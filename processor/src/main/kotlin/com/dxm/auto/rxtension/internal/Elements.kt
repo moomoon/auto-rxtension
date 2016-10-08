@@ -30,8 +30,8 @@ val Element.packageElement: PackageElement
     else -> enclosingElement.packageElement
   }
 
-val ExecutableElement.returnsKind: (TypeKind) -> Boolean
-    get() = { returnType.kind.equals(it) }
+//val ExecutableElement.returnsKind: (TypeKind) -> Boolean
+//    get() = { returnType.kind.equals(it) }
 
 enum class Scope {
   Public, Protected, Private, Package
