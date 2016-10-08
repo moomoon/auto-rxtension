@@ -7,6 +7,7 @@ import com.google.auto.service.AutoService
 import javax.annotation.processing.AbstractProcessor
 import javax.annotation.processing.RoundEnvironment
 import javax.annotation.processing.SupportedAnnotationTypes
+import javax.lang.model.SourceVersion
 import javax.lang.model.element.TypeElement
 import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
@@ -18,6 +19,8 @@ import javax.tools.Diagnostic.Kind.NOTE
 @SupportedAnnotationTypes("com.dxm.auto.rxtension.*")
 @AutoService(Processor::class)
 class RXtensionAnnotationProcessor : AbstractProcessor() {
+  override fun getSupportedSourceVersion() = SourceVersion.latestSupported()!!
+
   override fun process(annotations: MutableSet<out TypeElement>?, roundEnv: RoundEnvironment?): Boolean {
     val processingEnv = processingEnv ?: return false
     val roundEnv = roundEnv ?: return false
@@ -29,7 +32,8 @@ class RXtensionAnnotationProcessor : AbstractProcessor() {
       processingEnv.messager.printMessage(NOTE, "messaging")
 
     } catch(e: Exception) {
-      processingEnv.messager.printMessage(ERROR, e.message)
+      e.printStackTrace()
+      processingEnv.messager?.printMessage(ERROR, e.message ?: "no message $e")
     }
     return true
   }

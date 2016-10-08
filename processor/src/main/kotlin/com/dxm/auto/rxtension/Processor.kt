@@ -12,6 +12,6 @@ import com.dxm.auto.rxtension.processor.RXtensionProcessor
 interface Processor {
   fun process(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context)
   companion object AllProcessors {
-    val allProcessors: Array<Processor> = arrayOf(RXtensionProcessor())
+    val allProcessors = listOf(RXtensionProcessor())
   }
 }

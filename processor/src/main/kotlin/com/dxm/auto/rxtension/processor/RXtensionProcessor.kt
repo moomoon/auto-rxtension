@@ -56,7 +56,8 @@ class RXtensionTarget(val element: ExecutableElement, val annotation: RXtension,
 private val ExecutableElement.target: RXtensionTarget?
   get() = container?.let { RXtensionTarget(this, this.getAnnotation(RXtension::class.java), it) }
 
-private fun RXtensionTarget.build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) = type.builder(this).build(builders, context)
+private fun RXtensionTarget.build(builders: MutableMap<UniqueType, JavaFileHolder>, context: Context) = builders.getOrPut(container.uniqueType(context.processingEnv.typeUtils)) { container.emptyJavaFileHolder() }.add(this, context)
+
 
 //private fun RXtensionTarget.methodReceiverAsReceiver(context: Context) =
 //    element.enclosingTypeElement?.let { type -> element.parseScope { receiver, _, _ -> ReceiverType.Type(type, receiver, context.processingEnv.typeUtils) } }

@@ -2,6 +2,7 @@ package com.dxm.auto.rxtension
 
 import kotlin.annotation.AnnotationRetention.BINARY
 import kotlin.annotation.AnnotationTarget.*
+import kotlin.reflect.KClass
 
 /**
  * Created by Phoebe on 9/10/16.
@@ -9,7 +10,7 @@ import kotlin.annotation.AnnotationTarget.*
 
 @Retention(BINARY)
 @Target(FUNCTION)
-annotation class RXtension(val value: String = "", val exception: Class<in RuntimeException> = RuntimeException::class.java)
+annotation class RXtension(val value: String = "", val exception: KClass<in RuntimeException> = RuntimeException::class)
 
 @Retention(BINARY)
 @Target(CLASS)
