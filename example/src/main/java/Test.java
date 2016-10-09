@@ -4,6 +4,8 @@ import com.dxm.auto.rxtension.RXtension;
 import com.dxm.auto.rxtension.RXtensionClass;
 import com.dxm.auto.rxtension.Receiver;
 
+import java.util.List;
+
 import rx.functions.Action0;
 import rx.functions.Func0;
 
@@ -13,8 +15,8 @@ import rx.functions.Func0;
 @RXtensionClass("testabc")
 public class Test {
   @RXtension
-  public void test(@Partial String test) {
-
+  public double test(@Receiver("testa") String test,  List<Integer> params) {
+    return 0;
   }
   Action0 a = new Action0() {
     @Override

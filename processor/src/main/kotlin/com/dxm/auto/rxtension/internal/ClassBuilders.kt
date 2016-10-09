@@ -11,7 +11,6 @@ import com.google.common.base.CaseFormat.UPPER_CAMEL
 import com.google.common.collect.BiMap
 import com.google.common.collect.HashBiMap
 import com.squareup.javapoet.*
-import rx.functions.Action0
 import java.util.*
 import javax.lang.model.element.*
 import javax.lang.model.type.TypeKind
@@ -83,7 +82,21 @@ class JavaFileHolder(val packageName: String, private val builder: TypeSpec.Buil
     builder.addType(bindingClass)
   }
 
-  fun build() = JavaFile.builder(packageName, builder.apply { methodsAndTypes.forEach(builder.addEntry) }.build()!!).build()!!
+  fun build(): JavaFile {
+    val fieldsAndParams = receivers.values.map {
+      FieldSpec.builder(it.type.typeMirror.typeName, it.name, Modifier.PRIVATE, Modifier.FINAL).build() to
+          ParameterSpec.builder(it.type.typeMirror.typeName, it.name).build()
+    }
+    val constructorBuilder = MethodSpec.constructorBuilder()
+    fieldsAndParams.forEach {
+      builder.addField(it.first)
+      constructorBuilder.addParameter(it.second)
+      constructorBuilder.addStatement("this.\$N = \$N", it.first, it.second)
+    }
+
+    builder.addMethod(constructorBuilder.build())
+    return JavaFile.builder(packageName, builder.apply { methodsAndTypes.forEach(builder.addEntry) }.build()!!).build()!!
+  }
 }
 
 
@@ -192,9 +205,7 @@ private fun callMethod(returnType: TypeName, methodReceiver: MethodReceiver, met
       }
     }
   }
-  statement {
-    format += ")"
-  }
+  statement { format += ")" }
   builder.addStatement(statement.build())
   return builder.build()
 }
